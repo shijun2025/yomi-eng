@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>单词消消乐</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Times New Roman', serif;
+            background: #f0f5ff;
+        }
+        #controls {
+            padding: 20px;
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #gameArea {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            height: 80vh;
+        }
+        .column {
+            flex: 1;
+            position: relative;
+            margin: 0 10px;
+            min-height: 500px;
+        }
+        .bubble {
+            position: absolute;
+            padding: 15px 25px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translate(-50%, -50%);
+        }
+        .selected {
+            transform: translate(-50%, -50%) scale(1.2);
+            z-index: 999;
+        }
+        #overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.95);
+            padding: 30px 50px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(0,0,0,0.2);
+            display: none;
+        }
+        .firework {
+            font-size: 40px;
+            color: #ff6b6b;
+            animation: zoom 1s infinite;
+        }
+        @keyframes zoom {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button onclick="startGame()">开始游戏</button>
+        <input type="file" id="wordFile" accept=".xlsx" onchange="loadWords()">
+    </div>
+    <div id="gameArea">
+        <div id="englishCol" class="column"></div>
+        <div id="chineseCol" class="column"></div>
+    </div>
+    <div id="overlay">
+        <div class="firework">🎉 通关啦！</div>
+        <p id="stats"></p >
+    </div>
+
+    <script>
+        let wordList = [];
+        let selectedBubble = null;
+        let startTime = null;
+        let errorCount = 0;
+        const colors = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#FFC1F3'];
+        
+        // 音效（请替换为你的本地文件路径）
+        const sounds = {
+            click: new Audio('click.mp3'),
+            correct: new Audio('correct.mp3'),
+            wrong: new Audio('wrong.mp3'),
+            win: new Audio('win.mp3')
+        };
+
+        function loadWords() {
+            const file = document.getElementById('wordFile').files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                wordList = XLSX.utils.sheet_to_json(sheet, {header: ['english', 'chinese']});
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function startGame() {
+            if(wordList.length < 30) return alert('请先导入至少30个单词');
+            errorCount = 0;
+            startTime = Date.now();
+            document.getElementById('overlay').style.display = 'none';
+            
+            const selectedWords = getRandomWords(30);
+            createBubbles(selectedWords);
+        }
+
+        function createBubbles(words) {
+            const englishCol = document.getElementById('englishCol');
+            const chineseCol = document.getElementById('chineseCol');
+            englishCol.innerHTML = '';
+            chineseCol.innerHTML = '';
+
+            words.forEach(word => {
+                createBubble(word.english, englishCol, word);
+                createBubble(word.chinese, chineseCol, word);
+            });
+        }
+
+        function createBubble(text, parent, word) {
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            bubble.textContent = text;
+            bubble.dataset.word = JSON.stringify(word);
+            
+            // 随机位置和颜色
+            bubble.style.left = `${Math.random()*80 + 10}%`;
+            bubble.style.top = `${Math.random()*80 + 10}%`;
+            bubble.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
+            
+            bubble.onclick = () => handleClick(bubble, word);
+            parent.appendChild(bubble);
+        }
+
+        function handleClick(bubble, word) {
+            sounds.click.play();
+            bubble.classList.add('selected');
+            
+            if(!selectedBubble) {
+                selectedBubble = {element: bubble, word};
+            } else {
+                const isPair = JSON.stringify(selectedBubble.word) === JSON.stringify(word);
+                setTimeout(() => {
+                    bubble.classList.remove('selected');
+                    selectedBubble.element.classList.remove('selected');
+                    
+                    if(isPair) {
+                        sounds.correct.play();
+                        bubble.remove();
+                        selectedBubble.element.remove();
+                        checkWin();
+                    } else {
+                        sounds.wrong.play();
+                        errorCount++;
+                    }
+                    selectedBubble = null;
+                }, 500);
+            }
+        }
+
+        function checkWin() {
+            if(document.querySelectorAll('.bubble').length === 0) {
+                sounds.win.play();
+                const time = Math.floor((Date.now() - startTime)/1000);
+                document.getElementById('stats').innerHTML = `
+                    <p>单词数量: 30</p >
+                    <p>通关时间: ${Math.floor(time/60)}分${time%60}秒</p >
+                    <p>错误次数: ${errorCount}</p >
+                `;
+                document.getElementById('overlay').style.display = 'block';
+            }
+        }
+
+        function getRandomWords(n) {
+            return [...wordList].sort(() => Math.random() - 0.5).slice(0, n);
+        }
+    </script>
+</body>
+</html>
